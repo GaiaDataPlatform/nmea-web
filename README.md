@@ -45,7 +45,8 @@ handling any inconsistencies.
 | Python packages | fastapi≥0.100, uvicorn[standard], jinja2, uvloop |
 | Disk | ~140 MB/day per log file (typical NMEA traffic) |
 
-The installer handles system dependencies automatically via pip.
+The installer creates a Python virtualenv at `/opt/nmea-web/.venv` and installs all
+dependencies inside it — no system-wide packages are required beyond Python 3.9+.
 
 ## Quick Start
 
@@ -62,7 +63,8 @@ Open `http://<server-ip>:8080` in a browser. Default credentials are `admin` /
 
 1. Creates the system user `nmea-web` (no login shell).
 2. Creates `/opt/nmea-web/` (application) and `/var/nmea/` (log output).
-3. Copies the application files and installs Python dependencies.
+3. Copies the application files and creates a Python virtualenv with all
+   required packages.
 4. Installs the systemd unit and logrotate configuration.
 5. Enables and starts the service.
 

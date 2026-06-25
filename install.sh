@@ -38,11 +38,16 @@ python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)' || {
 }
 say "Python 3.9+ found."
 
-if ! command -v pip3 &>/dev/null; then
-    err "pip3 is required."
-    exit 1
+# Ensure venv + pip are available (Ubuntu ships python3-venv separately)
+if ! python3 -c 'import venv, ensurepip' 2>/dev/null; then
+    if command -v apt-get &>/dev/null; then
+        apt-get update -qq && apt-get install -y -qq python3-venv
+    else
+        err "python3-venv is required (installed via your package manager)."
+        exit 1
+    fi
+    say "Installed python3-venv."
 fi
-say "pip3 found."
 
 # ---------------------------------------------------------------------------
 # 2.  System user
@@ -94,13 +99,25 @@ python3 -m compileall -q "$APP_DIR" 2>/dev/null || true
 chown -R "${SVC_USER}:${SVC_USER}" "$APP_DIR"
 
 # ---------------------------------------------------------------------------
-# 5.  Python dependencies
+# 5.  Python virtualenv + dependencies
 # ---------------------------------------------------------------------------
-info "Installing Python dependencies..."
+info "Setting up Python virtual environment..."
 
-pip3 install -r "$APP_DIR/requirements.txt" --quiet 2>/dev/null && \
-    say "Python dependencies installed." || \
-    warn "pip install had issues — check: pip3 install -r $APP_DIR/requirements.txt"
+VENV_DIR="$APP_DIR/.venv"
+
+if [ -d "$VENV_DIR/bin" ]; then
+    say "Reusing existing virtualenv at $VENV_DIR"
+else
+    python3 -m venv --clear "$VENV_DIR"
+    say "Virtualenv created at $VENV_DIR"
+fi
+
+# Bootstrap pip inside the venv (ensurepip may be missing on minimal installs)
+"$VENV_DIR/bin/python3" -m ensurepip --upgrade 2>/dev/null || true
+"$VENV_DIR/bin/python3" -m pip install -r "$APP_DIR/requirements.txt" --quiet 2>&1 | tail -2
+say "Python dependencies installed."
+
+chown -R "${SVC_USER}:${SVC_USER}" "$VENV_DIR"
 
 # ---------------------------------------------------------------------------
 # 6.  Systemd unit

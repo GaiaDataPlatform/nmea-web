@@ -1,4 +1,5 @@
-fastapi>=0.100.0
-uvicorn[standard]
-jinja2
-uvloop
+fastapi>=0.100.0,<0.116
+uvicorn[standard]>=0.24
+jinja2>=3.0,<3.2
+starlette>=0.27,<0.39
+uvloop>=0.14
