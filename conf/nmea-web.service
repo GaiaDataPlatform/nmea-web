@@ -1,0 +1,25 @@
+[Unit]
+Description=NMEA Centralized Forwarder Web Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=nmea-web
+Group=nmea-web
+WorkingDirectory=/opt/nmea-web
+ExecStart=/usr/bin/python3 -m uvicorn main:app --host 0.0.0.0 --port 8080
+Restart=always
+RestartSec=5
+AmbientCapabilities=CAP_NET_BIND_SERVICE CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE CAP_NET_RAW
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=full
+ReadWritePaths=/opt/nmea-web /var/nmea
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

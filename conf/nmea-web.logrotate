@@ -1,0 +1,17 @@
+# NMEA Web log rotation
+# /etc/logrotate.d/nmea-web
+# Copre automaticamente TUTTE le sorgenti con log abilitato,
+# indipendentemente dall'estensione del file.
+/var/nmea/*.csv
+/var/nmea/*.log
+{
+    daily
+    rotate 14
+    missingok
+    notifempty
+    copytruncate
+    compress
+    delaycompress
+    dateext
+    dateformat -%Y%m%d
+}

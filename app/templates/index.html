@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NMEA Forwarder</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;background:#e8f4f8;color:#1a3a4a;padding:24px}
+h1{font-size:1.3rem;color:#0077b6;margin-bottom:20px}
+h1 span{color:#6b8a9a;font-weight:400;font-size:.9rem}
+.toolbar{display:flex;gap:12px;margin-bottom:16px;align-items:center}
+.btn{padding:6px 14px;border:1px solid #c8dce4;border-radius:6px;background:#fff;color:#1a3a4a;cursor:pointer;font-family:inherit;font-size:.82rem;white-space:nowrap}
+.btn:hover{background:#d4e8f0}
+.btn-primary{background:#0077b6;border-color:#0077b6;color:#fff}
+.btn-primary:hover{background:#0096c7}
+.btn-danger{color:#e63946}
+.btn-danger:hover{background:#fce4e4;border-color:#e63946}
+.btn-sm{padding:3px 8px;font-size:.75rem}
+.status-badge{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+.status-on{background:#06a77d;box-shadow:0 0 8px #06a77d}
+.status-off{background:#b0c4ce}
+table{width:100%;border-collapse:collapse;font-size:.82rem;background:#fff;border-radius:6px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+th{text-align:left;padding:10px 12px;border-bottom:2px solid #c8dce4;color:#6b8a9a;font-weight:600;background:#f0f6f9}
+td{padding:10px 12px;border-bottom:1px solid #e8f0f4}
+tr:last-child td{border-bottom:none}
+tr:hover{background:#f5fafc}
+.dest-tag{display:inline-block;background:#e0f0f8;border:1px solid #b8d8e8;border-radius:4px;padding:2px 7px;margin:1px 2px;font-size:.72rem;color:#0077b6}
+.dest-tag.br{border-color:#f0c040;background:#fff8e0;color:#8a6d14}
+.no-log{color:#b0c4ce;font-style:italic}
+.stats{font-size:.72rem;color:#6b8a9a}
+.stats span{display:inline-block;margin-right:10px}
+.stats .in{color:#0077b6}
+.stats .out{color:#06a77d}
+.stats .err{color:#e63946}
+.stats .drp{color:#e6a300}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10;justify-content:center;align-items:flex-start;padding-top:40px}
+.modal-overlay.active{display:flex}
+.modal{background:#fff;border:1px solid #c8dce4;border-radius:10px;padding:24px 28px;width:660px;max-height:85vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.15)}
+.modal h2{font-size:1.05rem;color:#0077b6;margin-bottom:18px}
+.form-group{margin-bottom:12px}
+.form-group label{display:block;font-size:.78rem;color:#4a6a7a;margin-bottom:3px;font-weight:500}
+.form-group .hint{font-size:.68rem;color:#8aa8b8;margin-top:2px}
+.form-group input,.form-group select{width:100%;padding:7px 9px;background:#f8fbfc;border:1px solid #c8dce4;border-radius:5px;color:#1a3a4a;font-family:inherit;font-size:.82rem}
+.form-group input:focus,.form-group select:focus{outline:none;border-color:#0077b6;box-shadow:0 0 0 2px rgba(0,119,182,.15)}
+.form-row{display:flex;gap:10px}
+.form-row .form-group{flex:1}
+.dest-section{margin-top:12px;padding:12px;background:#f8fbfc;border-radius:6px;border:1px solid #d8e4ec}
+.dest-section h3{font-size:.8rem;color:#4a6a7a;margin-bottom:10px}
+.dest-row{display:flex;gap:6px;align-items:flex-end;margin-bottom:8px;flex-wrap:wrap}
+.dest-row input,.dest-row select{flex:1;min-width:90px;padding:6px 8px;background:#fff;border:1px solid #d0dce4;border-radius:4px;color:#1a3a4a;font-family:inherit;font-size:.78rem}
+.dest-row input:focus,.dest-row select:focus{outline:none;border-color:#0077b6}
+.dest-row .sm{flex:0 0 70px}
+.dest-row .btn{flex:0 0 auto}
+.actions{display:flex;gap:8px;margin-top:16px}
+.error{color:#e63946;font-size:.78rem;margin-top:4px}
+.empty{text-align:center;padding:48px 40px;color:#8aa8b8;font-size:.85rem}
+.toast{position:fixed;bottom:20px;right:20px;padding:10px 18px;border-radius:6px;font-size:.82rem;z-index:20;animation:fadein .3s;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.1)}
+.toast-ok{border-left:3px solid #06a77d;color:#06a77d}
+.toast-err{border-left:3px solid #e63946;color:#e63946}
+@keyframes fadein{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.sysinfo{display:flex;gap:20px;font-size:.7rem;color:#6b8a9a;margin-bottom:10px;flex-wrap:wrap}
+.sysinfo span{white-space:nowrap}
+</style>
+</head>
+<body>
+
+<h1>NMEA Forwarder <span>— dashboard</span></h1>
+
+<div id="sysinfo" class="sysinfo">
+  <span>Mem: <span id="si-mem">—</span></span>
+  <span>CPU: <span id="si-load">—</span></span>
+  <span>Uptime: <span id="si-uptime">—</span></span>
+  <span>Process: <span id="si-proc">—</span></span>
+  <span>Active: <span id="si-active">—</span></span>
+</div>
+
+<div class="toolbar">
+   <button class="btn btn-primary" onclick="openModal()">+ New Source</button>
+   <span id="auto-refresh" style="font-size:.72rem;color:#8aa8b8;margin-left:auto">refresh: 30s</span>
+</div>
+
+<table>
+<thead>
+<tr>
+   <th>Source</th>
+   <th>Listen</th>
+   <th>Destinations</th>
+   <th>Log</th>
+   <th>Statistics (30s)</th>
+   <th style="text-align:right">Actions</th>
+</tr>
+</thead>
+<tbody id="table-body">
+   <tr><td class="empty" colspan="6">No source configured. Click "+ New Source" to create one.</td></tr>
+</tbody>
+</table>
+
+<div id="modal" class="modal-overlay">
+<div class="modal">
+<h2 id="modal-title">New Source</h2>
+<form id="source-form">
+  <input type="hidden" id="f-id" value="">
+  <div class="form-row">
+     <div class="form-group"><label>Name</label><input id="f-name" placeholder="e.g. seapath" required><span class="hint">Unique source identifier</span></div>
+     <div class="form-group"><label>Listen IP</label><input id="f-listen-ip" value="0.0.0.0" required><span class="hint">0.0.0.0 = listen on all interfaces</span></div>
+     <div class="form-group" style="flex:0 0 110px"><label>UDP Port</label><input id="f-listen-port" type="number" min="1" max="65535" placeholder="e.g. 10333" required><span class="hint">Listening port</span></div>
+  </div>
+   <div class="form-group"><label>Listen Interface</label><select id="f-interface"><option value="">— all —</option></select><span class="hint">Bind the socket to a specific network interface. Optional: leave empty to listen on all</span></div>
+
+   <div class="dest-section" id="dest-section">
+     <h3>Destinations — where to forward received data</h3>
+     <div id="dest-list"></div>
+     <button type="button" class="btn btn-sm" onclick="addDest()">+ Add destination</button>
+  </div>
+
+  <div class="form-row" style="margin-top:12px">
+     <div class="form-group" style="flex:0 0 auto"><label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="f-log-enabled" onchange="toggleLog()" style="width:auto"> Enable file logging</label></div>
+     <div class="form-group" id="log-file-group" style="display:none"><label>CSV file path</label><input id="f-log-file" placeholder="/var/nmea/seapath.csv"><span class="hint">Each line: timestamp;source_ip;nmea_sentence. The file is created if it does not exist.</span></div>
+  </div>
+
+  <div class="actions">
+     <button type="submit" class="btn btn-primary">Save</button>
+     <button type="button" class="btn" onclick="closeModal()">Cancel</button>
+    <span class="error" id="form-error"></span>
+  </div>
+</form>
+</div>
+</div>
+
+<div id="log-modal" class="modal-overlay">
+<div class="modal" style="width:750px">
+<h2 id="log-title">Log</h2>
+<div style="display:flex;gap:10px;align-items:center;margin-bottom:12px">
+  <span id="log-filepath" style="font-size:.75rem;color:#6b8a9a;flex:1"></span>
+  <span id="log-info" style="font-size:.72rem;color:#8aa8b8"></span>
+   <button class="btn btn-sm" onclick="refreshLog()" title="Refresh">↻</button>
+</div>
+<pre id="log-content" style="background:#f8fbfc;border:1px solid #d8e4ec;border-radius:5px;padding:12px;font-size:.76rem;line-height:1.5;max-height:400px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;color:#1a3a4a;margin:0"></pre>
+<div class="actions" style="margin-top:12px">
+   <button class="btn" onclick="closeLogModal()">Close</button>
+</div>
+</div>
+</div>
+
+<script>
+let sources = [];
+let editingId = null;
+let destCount = 0;
+let ifaceOptions = '';
+let fetchError = false;
+const $ = id => document.getElementById(id);
+
+function getAuthHeaders() {
+  return {'Authorization': 'Basic ' + btoa('admin:admin'), 'Content-Type': 'application/json'};
+}
+
+async function api(url, opts = {}) {
+  opts.headers = {...getAuthHeaders(), ...(opts.headers||{})};
+  if (opts.body && typeof opts.body !== 'string') opts.body = JSON.stringify(opts.body);
+  const res = await fetch(url, opts);
+  if (res.status === 401) {
+    fetchError = true;
+     throw new Error('Authentication failed. Reload the page.');
+  }
+  if (!res.ok) {
+     const err = await res.json().catch(() => ({detail:'Request failed: ' + res.status}));
+     throw new Error(err.detail || 'Error ' + res.status);
+  }
+  return res.json();
+}
+
+async function loadSources() {
+  try {
+    fetchError = false;
+    sources = await api('/api/sources');
+    renderTable();
+  } catch(e) {
+    console.error('loadSources:', e.message);
+    if (fetchError) {
+       document.body.innerHTML = '<div style="text-align:center;padding:60px;color:#e63946"><h2>Session expired</h2><p>Reload the page to re-authenticate.</p></div>';
+    }
+  }
+}
+
+async function loadInterfaces() {
+  try {
+    const ifaces = await api('/api/interfaces');
+    const sel = $('f-interface');
+     sel.innerHTML = '<option value="">— all —</option>';
+    let opts = '';
+    ifaces.forEach(i => {
+      const ips = i.ips.length ? ' (' + i.ips.join(', ') + ')' : '';
+      sel.innerHTML += `<option value="${i.name}">${i.name}${ips}</option>`;
+      i.ips.forEach(ip => {
+        opts += `<option value="${ip}">${i.name} — ${ip}</option>`;
+      });
+    });
+    ifaceOptions = opts;
+  } catch(e) { console.error('loadInterfaces:', e.message); }
+}
+
+function renderTable() {
+  const tbody = $('table-body');
+  if (!sources.length) {
+     tbody.innerHTML = '<tr><td class="empty" colspan="6">No source configured. Click "+ New Source" to create one.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = sources.map(s => {
+    const dests = (s.destinations || []).map(d =>
+      `<span class="dest-tag ${d.mode==='broadcast'?'br':''}">${d.mode==='broadcast'?'broadcast':'unicast'} → ${d.dest_ip}:${d.dest_port}</span>`
+     ).join('') || '<span class="no-log">none</span>';
+
+     const logCell = s.log_enabled
+       ? `<a href="#" onclick="openLog(${s.id});return false" style="font-size:.72rem;color:#0077b6;text-decoration:none;border-bottom:1px dotted #0077b6" title="Click to view last lines">${esc(s.log_file||'')}</a>`
+       : '<span class="no-log">disabled</span>';
+
+    const badge = s.running
+      ? '<span class="status-badge status-on"></span>'
+      : '<span class="status-badge status-off"></span>';
+
+    const stats = s.running
+      ? `<span class="stats"><span class="in">IN: ${s.stats_packets_in}</span><span class="out">OUT: ${s.stats_packets_out}</span><span class="err">ERR: ${s.stats_errors}</span><span class="drp">DRP: ${s.stats_dropped||0}</span></span>`
+      : '';
+
+     const btn = s.running
+       ? `<button class="btn btn-sm" onclick="stopSource(${s.id})" title="Stop forwarding">■</button>`
+       : `<button class="btn btn-sm btn-primary" onclick="startSource(${s.id})" title="Start forwarding">▶</button>`;
+
+    return `<tr>
+      <td>${badge}<strong>${esc(s.name)}</strong></td>
+      <td>${esc(s.listen_ip)}:${s.listen_port}${s.interface?' <span style="font-size:.68rem;color:#8aa8b8">@'+esc(s.interface)+'</span>':''}</td>
+      <td>${dests}</td>
+      <td>${logCell}</td>
+      <td>${stats}</td>
+      <td style="text-align:right;white-space:nowrap">
+        ${btn}
+         <button class="btn btn-sm" onclick="editSource(${s.id})" title="Edit source">✎</button>
+         <button class="btn btn-sm btn-danger" onclick="deleteSource(${s.id})" title="Delete source">✕</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function esc(s) {
+  if (s == null) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+async function startSource(id) {
+   try { await api('/api/sources/' + id + '/start', {method:'POST'}); toast('Source started'); loadSources(); }
+  catch(e) { toastErr(e.message); }
+}
+
+async function stopSource(id) {
+   try { await api('/api/sources/' + id + '/stop', {method:'POST'}); toast('Source stopped'); loadSources(); }
+  catch(e) { toastErr(e.message); }
+}
+
+async function deleteSource(id) {
+   if (!confirm('Delete this source?')) return;
+   try { await api('/api/sources/' + id, {method:'DELETE'}); toast('Source deleted'); loadSources(); }
+  catch(e) { toastErr(e.message); }
+}
+
+async function editSource(id) {
+  const s = sources.find(x => x.id === id);
+  if (!s) return;
+  await loadInterfaces();
+  editingId = id;
+   $('modal-title').textContent = 'Edit Source';
+  $('f-id').value = id;
+  $('f-name').value = s.name;
+  $('f-listen-ip').value = s.listen_ip;
+  $('f-listen-port').value = s.listen_port;
+  $('f-interface').value = s.interface || '';
+  $('f-log-enabled').checked = !!s.log_enabled;
+  $('f-log-file').value = s.log_file || '';
+  toggleLog();
+  destCount = 0;
+  $('dest-list').innerHTML = '';
+  (s.destinations || []).forEach(d => addDest(d));
+  $('form-error').textContent = '';
+  $('modal').classList.add('active');
+}
+
+async function openModal() {
+  await loadInterfaces();
+  editingId = null;
+   $('modal-title').textContent = 'New Source';
+  $('source-form').reset();
+  $('f-id').value = '';
+  $('f-listen-ip').value = '0.0.0.0';
+  $('f-log-enabled').checked = false;
+  $('f-log-file').value = '';
+  toggleLog();
+  destCount = 0;
+  $('dest-list').innerHTML = '';
+  addDest();
+  $('form-error').textContent = '';
+  $('modal').classList.add('active');
+}
+
+function closeModal() {
+  $('modal').classList.remove('active');
+}
+
+function toggleLog() {
+  $('log-file-group').style.display = $('f-log-enabled').checked ? '' : 'none';
+}
+
+function addDest(data) {
+  data = data || {};
+  const div = document.createElement('div');
+  div.className = 'dest-row';
+  destCount++;
+
+  const selOpts = '<option value="">— default —</option>' + ifaceOptions;
+  const sel = document.createElement('select');
+  sel.setAttribute('data-key', 'bind_ip');
+  sel.style.flex = '1.5';
+   sel.title = 'Output interface for the packet';
+  sel.innerHTML = selOpts;
+  if (data.bind_ip) sel.value = data.bind_ip;
+
+  const inpDest = document.createElement('input');
+  inpDest.type = 'text';
+   inpDest.placeholder = 'Destination IP';
+   inpDest.setAttribute('data-key', 'dest_ip');
+   inpDest.required = true;
+   inpDest.title = 'IP to send data to';
+  if (data.dest_ip) inpDest.value = data.dest_ip;
+
+  const inpPort = document.createElement('input');
+  inpPort.type = 'number';
+  inpPort.className = 'sm';
+   inpPort.placeholder = 'Port';
+   inpPort.setAttribute('data-key', 'dest_port');
+   inpPort.min = '1';
+   inpPort.max = '65535';
+   inpPort.required = true;
+   inpPort.title = 'UDP destination port';
+  if (data.dest_port) inpPort.value = data.dest_port;
+
+  const selMode = document.createElement('select');
+  selMode.setAttribute('data-key', 'mode');
+  selMode.style.flex = '0 0 105px';
+   selMode.title = 'Unicast or broadcast mode';
+  selMode.innerHTML = '<option value="unicast">unicast</option><option value="broadcast">broadcast</option>';
+  selMode.value = data.mode || 'unicast';
+
+  const inpPrefix = document.createElement('input');
+  inpPrefix.type = 'number';
+  inpPrefix.className = 'sm prefix-field';
+  inpPrefix.placeholder = '/24';
+  inpPrefix.setAttribute('data-key', 'prefix');
+  inpPrefix.min = '8';
+  inpPrefix.max = '32';
+   inpPrefix.title = 'Network mask for broadcast (e.g. 24 = /24). Ignored in unicast.';
+  inpPrefix.value = data.prefix || 24;
+  if ((data.mode || 'unicast') !== 'broadcast') inpPrefix.style.display = 'none';
+
+  selMode.onchange = function() {
+    inpPrefix.style.display = selMode.value === 'broadcast' ? '' : 'none';
+  };
+
+  const btnDel = document.createElement('button');
+  btnDel.type = 'button';
+  btnDel.className = 'btn btn-sm btn-danger';
+  btnDel.textContent = '−';
+   btnDel.title = 'Remove destination';
+  btnDel.onclick = function() { div.remove(); };
+
+  div.appendChild(sel);
+  div.appendChild(inpDest);
+  div.appendChild(inpPort);
+  div.appendChild(selMode);
+  div.appendChild(inpPrefix);
+  div.appendChild(btnDel);
+  $('dest-list').appendChild(div);
+}
+
+function collectDests() {
+  const dests = [];
+  $('dest-list').querySelectorAll('.dest-row').forEach(row => {
+    const d = {};
+    row.querySelectorAll('[data-key]').forEach(el => {
+      const k = el.dataset.key;
+      d[k] = el.type === 'number' ? Number(el.value) : el.value.trim();
+    });
+    if (d.bind_ip === '') d.bind_ip = null;
+    if (d.dest_ip && d.dest_port) dests.push(d);
+  });
+  return dests;
+}
+
+$('source-form').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  $('form-error').textContent = '';
+  const dests = collectDests();
+   if (!dests.length) { $('form-error').textContent = 'Add at least one destination'; return; }
+
+  const body = {
+    name: $('f-name').value.trim(),
+    listen_ip: $('f-listen-ip').value.trim(),
+    listen_port: Number($('f-listen-port').value),
+    interface: $('f-interface').value || null,
+    log_enabled: $('f-log-enabled').checked,
+    log_file: $('f-log-enabled').checked ? $('f-log-file').value.trim() || null : null,
+    destinations: dests,
+  };
+
+  try {
+     if (editingId) {
+       await api('/api/sources/' + editingId, {method:'PUT', body});
+       toast('Source updated');
+     } else {
+       await api('/api/sources', {method:'POST', body});
+       toast('Source created');
+     }
+    closeModal();
+    loadSources();
+  } catch(e) { $('form-error').textContent = e.message; }
+});
+
+function toast(msg) {
+  const el = document.createElement('div');
+  el.className = 'toast toast-ok';
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(function() { el.remove(); }, 3000);
+}
+function toastErr(msg) {
+  const el = document.createElement('div');
+  el.className = 'toast toast-err';
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(function() { el.remove(); }, 4000);
+}
+
+$('modal').addEventListener('click', function(e) { if (e.target === $('modal')) closeModal(); });
+$('log-modal').addEventListener('click', function(e) { if (e.target === $('log-modal')) closeLogModal(); });
+
+let currentLogSourceId = null;
+
+async function openLog(sourceId) {
+  currentLogSourceId = sourceId;
+   $('log-title').textContent = 'Source log #' + sourceId;
+   $('log-content').textContent = 'Loading...';
+  $('log-modal').classList.add('active');
+  await refreshLog();
+}
+
+function closeLogModal() {
+  $('log-modal').classList.remove('active');
+  currentLogSourceId = null;
+}
+
+async function refreshLog() {
+  if (!currentLogSourceId) return;
+  try {
+    const data = await api('/api/sources/' + currentLogSourceId + '/log?lines=10');
+    $('log-filepath').textContent = data.file;
+     let totText = data.total >= 0 ? data.total.toLocaleString() + ' lines' : formatFileSize(data.size_bytes||0);
+     $('log-info').textContent = 'showing ' + data.shown + ' of ' + totText;
+     $('log-content').textContent = data.lines.length ? data.lines.join('\n') : '(empty file)';
+   } catch(e) {
+     $('log-content').textContent = 'Error: ' + e.message;
+  }
+}
+
+function formatUptime(sec) {
+  const d = Math.floor(sec / 86400);
+  const h = Math.floor((sec % 86400) / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+   if (d > 0) return d + 'd ' + h + 'h';
+  if (h > 0) return h + 'h ' + m + 'm';
+  return m + 'm';
+}
+
+async function loadSystemInfo() {
+  try {
+    const info = await api('/api/system');
+    $('si-mem').textContent = info.memory.used_mb + '/' + info.memory.total_mb + ' MB';
+    $('si-load').textContent = info.cpu_load['1m'].toFixed(2) + ' ' + info.cpu_load['5m'].toFixed(2) + ' ' + info.cpu_load['15m'].toFixed(2);
+    $('si-uptime').textContent = formatUptime(info.uptime_seconds);
+    $('si-proc').textContent = info.process_rss_mb + ' MB RSS';
+    $('si-active').textContent = info.engine.active_sources + '/' + info.engine.total_tracked;
+  } catch(e) {}
+}
+
+function formatFileSize(bytes) {
+  if (!bytes || bytes < 0) return '?';
+  if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(1) + ' GB';
+  if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB';
+  if (bytes >= 1024) return Math.round(bytes / 1024) + ' KB';
+  return bytes + ' B';
+}
+
+loadInterfaces();
+loadSources();
+loadSystemInfo();
+setInterval(function() { loadSources(); loadSystemInfo(); }, 30000);
+</script>
+</body>
+</html>
